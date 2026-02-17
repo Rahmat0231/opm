@@ -31,7 +31,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            
+            // Konfigurasi agresif untuk menyulitkan analisis
+            signingConfig = signingConfigs.getByName("debug") // Placeholder, gunakan release keystore nanti
+        }
+        debug {
+            isMinifyEnabled = true // Aktifkan juga di debug untuk simulasi proteksi
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

